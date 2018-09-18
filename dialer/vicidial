@@ -1,0 +1,252 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          vicidial
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start daemons GOCALL at boot time
+# Description:       Enable service GOCALL by GOSAT SA.
+### END INIT INFO
+
+cd /root
+
+AST_BIN=/usr/sbin/asterisk
+test -x $AST_BIN || { echo "$AST_BIN not installed";
+	if [ "$1" = "stop" ]; then exit 0;
+	else exit 5; fi; }
+
+VICI_DIR=/usr/share/astguiclient
+test -x $VICI_DIR/start_asterisk_boot.pl || { echo "$VICI_BIN/start_asterisk_boot.pl not installed";
+        if [ "$1" = "stop" ]; then exit 0;
+        else exit 5; fi; }
+
+ZTCFG_BIN=/usr/sbin/dahdi_cfg
+test -x $ZTCFG_BIN || { echo "$ZTCFG_BIN not installed";
+        if [ "$1" = "stop" ]; then exit 0;
+        else exit 5; fi; }
+
+ZAP_MOD=dahdi
+SCREEN=/usr/bin/screen
+
+start_daemon() { return /sbin/start_daemon ${1+"$@"}; }
+killproc()     { return /sbin/killproc     ${1+"$@"}; }
+pidofproc()    { return /sbin/pidofproc    ${1+"$@"}; }
+checkproc()    { return /sbin/checkproc    ${1+"$@"}; }
+if test -e /etc/rc.status; then
+
+  . /etc/rc.status
+else
+    export LC_ALL=POSIX
+    _cmd=$1
+    declare -a _SMSG
+    if test "${_cmd}" = "status"; then
+	_SMSG=(running dead dead unused unknown reserved)
+	_RC_UNUSED=3
+    else
+	_SMSG=(done failed failed missed failed skipped unused failed failed reserved)
+	_RC_UNUSED=6
+    fi
+    if test -e /lib/lsb/init-functions; then
+
+      . /lib/lsb/init-functions
+	echo_rc()
+	{
+	    if test ${_RC_RV} = 0; then
+		log_success_msg "  [${_SMSG[${_RC_RV}]}] "
+	    else
+		log_failure_msg "  [${_SMSG[${_RC_RV}]}] "
+	    fi
+	}
+	checkproc() { return pidofproc ${1+"$@"} >/dev/null 2>&1; }
+    elif test -e /etc/init.d/functions; then
+	. /etc/init.d/functions
+	echo_rc()
+	{
+	    if test ${_RC_RV} = 0; then
+		success "  [${_SMSG[${_RC_RV}]}] "
+	    else
+		failure "  [${_SMSG[${_RC_RV}]}] "
+	    fi
+	}
+	checkproc() { return status ${1+"$@"}; }
+	start_daemon() { return daemon ${1+"$@"}; }
+    else
+	echo_rc() { echo "  [${_SMSG[${_RC_RV}]}] "; }
+    fi
+    rc_reset() { _RC_RV=0; }
+    rc_failed()
+    {
+	if test -z "$1"; then
+	    _RC_RV=1;
+	elif test "$1" != "0"; then
+	    _RC_RV=$1;
+    	fi
+	return ${_RC_RV}
+    }
+    rc_check()
+    {
+	return rc_failed $?
+    }
+    rc_status()
+    {
+	rc_failed $?
+	if test "$1" = "-r"; then _RC_RV=0; shift; fi
+	if test "$1" = "-s"; then rc_failed 5; echo_rc; rc_failed 3; shift; fi
+	if test "$1" = "-u"; then rc_failed ${_RC_UNUSED}; echo_rc; rc_failed 3; shift; fi
+	if test "$1" = "-v"; then echo_rc; shift; fi
+	if test "$1" = "-r"; then _RC_RV=0; shift; fi
+	return ${_RC_RV}
+    }
+    rc_exit() { exit ${_RC_RV}; }
+    rc_active()
+    {
+	if test -z "$RUNLEVEL"; then read RUNLEVEL REST < <(/sbin/runlevel); fi
+	if test -e /etc/init.d/S[0-9][0-9]${1}; then return 0; fi
+	return 1
+    }
+fi
+
+rc_reset
+
+case "$1" in
+start)
+	echo "Loading DAHDI drivers para o Meeting"
+
+	if /sbin/lsmod | /bin/grep dahdi
+	then
+		echo "DAHDI modulo ja carregado"
+	else
+
+			if ! /sbin/lsmod | /bin/grep dahdi ; then
+				echo "DAHDI falhou $ZAP_MOD module!"
+				/sbin/modprobe $ZAP_MOD || { echo "$ZAP_MOD nao carregado" ; exit 5; }
+			fi
+
+			echo "Carregando DAHDI $ZAP_MOD"
+			/sbin/modprobe $ZAP_MOD || { echo "$ZAP_MOD nao carregado" ; exit 5; }
+	fi
+
+	sleep 3
+
+	echo "Configurando DAHDI"
+	$ZTCFG_BIN -vvv
+
+	sleep 10
+
+	$VICI_DIR/ADMIN_restart_roll_logs.pl
+
+	sleep 2
+
+	$VICI_DIR/AST_reset_mysql_vars.pl
+
+	sleep 2
+
+        echo -n "Iniciando Asterisk "
+
+	sleep 2
+
+	$VICI_DIR/start_asterisk_boot.pl
+
+	sleep 2
+
+	$VICI_DIR/ADMIN_keepalive_ALL.pl
+
+	echo ""
+
+	echo "Iniciando VICIdial"
+
+	rc_status -v
+	;;
+stop)
+
+    if /bin/ps -A | /bin/grep asterisk
+    then
+		echo "Parando Asterisk"
+		$AST_BIN -rx "core stop now" 1> /dev/null 2> /dev/null # stop asterisk
+		echo "Asterisk Parado"
+	else
+		echo "Asterisk nao esta rodando"
+	fi
+
+  SCREENPID1=`ps -ef | grep asterisk | grep -v grep | grep SCREEN | awk '{print $2}'`
+  SCREENPID2=`ps -ef | grep astshell | grep -v grep | grep SCREEN | awk '{print $2}'`
+    if [ -n "$SCREENPID1" -o -n "$SCREENPID2" ]; then
+      echo -n "   Parando asterisk screens... "
+      /bin/kill -9 $SCREENPID1  2>>/var/log/vicidial.log 1>&2
+      /bin/kill -9 $SCREENPID2  2>>/var/log/vicidial.log 1>&2
+      $SCREEN -wipe  2>>/var/log/vicidial.log 1>&2
+      echo "Pronto"
+     else
+          echo "Sem asterisk screens rodando, skipping."
+     fi
+
+        if /sbin/lsmod | /bin/grep dahdi
+        then
+		$ZTCFG_BIN -s
+	fi
+
+        if /sbin/lsmod | /bin/grep $ZAP_MOD
+        then
+		/sbin/rmmod $ZAP_MOD
+	fi
+
+        if /sbin/lsmod | /bin/grep zttranscode
+        then
+                /sbin/rmmod zttranscode
+        fi
+
+        if /sbin/lsmod | /bin/grep zaptel
+        then
+                /sbin/rmmod zaptel
+        fi
+
+
+	# Remember status and be verbose
+
+	echo -n "VICIdial Parado "
+
+	rc_status -v
+	;;
+    try-restart|condrestart)
+	## Do a restart only if the service was active before.
+	## Note: try-restart is now part of LSB (as of 1.9).
+	## RH has a similar command named condrestart.
+	if test "$1" = "condrestart"; then
+		echo "${attn} Use try-restart ${done}(LSB)${attn} rather than condrestart ${warn}(RH)${norm}"
+	fi
+	$0 status
+	if test $? = 0; then
+		$0 restart
+	else
+		rc_reset	# Not running is not a failure.
+	fi
+	# Remember status and be quiet
+	rc_status
+	;;
+restart)
+	## Stop the service and regardless of whether it was
+	## running or not, start it again.
+	$0 stop
+	$0 start
+
+	# Remember status and be quiet
+	rc_status
+	;;
+status)
+    echo -n "Checking for service Vicidial "
+
+	/usr/bin/screen -ls
+	checkproc $AST_BIN
+	rc_status -v
+	;;
+probe)
+
+	test /etc/FOO/FOO.conf -nt /var/run/FOO.pid && echo reload
+	;;
+    *)
+	echo "USE: $0 {start|stop|status|try-restart|restart|force-reload|reload|probe}"
+	exit 1
+	;;
+esac
+rc_exit
