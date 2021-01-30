@@ -5,6 +5,6 @@ Este repositorio e destinado aos usuarios do VICIdial open source Contact Center
 
 Conteudo:
 LANGUAGE_ALL_pt_BR_20180302-173249.txt: arquivo contento o conteudo da tradução do AGC e VICIdial Admin
-PROCEDIMENTO_BACKUP.pdf: arquivo de suporte ao video sobre o Backup do VICIdial
+Procedimento_backup_restore.pdf: arquivo de suporte ao video sobre o Backup do VICIdial
 VICIdial_TRAINING.pdf: informacoes sobre o curdo oferecido pelo VICIdial Brasil
 
