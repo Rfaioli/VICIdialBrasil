@@ -2,6 +2,8 @@
 #by Rogger Faioli - vicidial@vicidialbrasil.com.br
 #last revision 02/07/2021
 
+#Portugues Brasil
+
 Como o fail2ban tem uma certa dificuldade em banir determinados tipos de ataques, criamos o security para deixar o invasor discar e boloquear o IP de origem.
 
 Siga os passos
@@ -9,8 +11,25 @@ Siga os passos
 2 copie o arquivo sip.conf para dentro de /etc/asterisk e faca as alteracoes necessarias para suas configuracoes
 3 inserir #include security.conf antes do contexto [trunkinbound] como o exemplo: 
 
-#include extensions-vicidial.conf
-#include extensions-security.conf
-[trunkinbound]
+	#include extensions-vicidial.conf
+	#include extensions-security.conf
+	[trunkinbound]
 
 4 instale o framework UFW no seu sistema operacional
+
+################################################################################################################################################
+
+#English
+
+As fail2ban has a certain difficulty in banning certain types of attacks, we created extensions security to let the attacker dial in and block the source IP.
+
+Follow the steps
+1 copy the security.conf file into /etc/asterisk
+2 copy the sip.conf file into /etc/asterisk and make the necessary changes to your settings
+3 insert #include security.conf before the [trunkinbound] context as an example:
+
+	#include extensions-vicidial.conf
+	#include extensions-security.conf
+	[trunkinbound]
+
+4 install the UFW framework on your operating system
